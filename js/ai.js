@@ -1,0 +1,255 @@
+/* =========================================================================
+ * F1 THE GAME - AI driver
+ * 레이싱 라인 추종 + 코너 속도 예측 브레이킹 + 배틀/추월 + 피트 전략
+ * ========================================================================= */
+(function (global) {
+  'use strict';
+
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+
+  function cornerSpeed(k, mu, aero) {
+    k = Math.abs(k);
+    var df = 0.0055 * (aero || 1);
+    var d = k - mu * df;
+    if (d <= 0.00002) return 120;
+    return Math.min(120, Math.sqrt(16.19 * mu / d));
+  }
+
+  function AIDriver(car, track, skill) {
+    this.car = car;
+    this.track = track;
+    this.skill = skill;                 // 0.85 ~ 1.0
+    this.mode = 'race';                 // race | pitIn | pitStop | pitOut
+    this.pitPtr = 0;
+    this.offset = 0;                    // 목표 횡방향 오프셋(추월용)
+    this.targetOffset = 0;
+    this.wantPit = false;
+    this.pitLap = 99;
+    this.nextCompound = 'medium';
+    this.stuck = 0;
+    this.offTime = 0;
+    this.noise = Math.random() * 6.28;
+    this.mistake = 0;
+    this.boxIdx = 0;
+    this.reaction = 0;
+  }
+
+  AIDriver.prototype.planStrategy = function (totalLaps, startCompound) {
+    var c = this.car;
+    // 스틴트 절반 지점 부근에서 피트인 (드라이버 성향에 따라 ±1랩)
+    var mid = Math.max(1, Math.round(totalLaps * (0.42 + Math.random() * 0.22)));
+    this.pitLap = clamp(mid, 1, totalLaps - 1);
+    if (startCompound === 'soft') this.nextCompound = 'hard';
+    else if (startCompound === 'hard') this.nextCompound = 'medium';
+    else this.nextCompound = Math.random() < 0.6 ? 'hard' : 'soft';
+  };
+
+  AIDriver.prototype.update = function (dt, race) {
+    var car = this.car, track = this.track, n = track.n;
+    if (car.retired) { car.throttle = 0; car.brake = 1; car.steer = 0; return; }
+
+    var mu = race.grip * this.skill * car.tyreGrip() * car.pace;
+    var df = 0.0055 * car.aero * car.speed * car.speed;
+    var brakeDecel = 0.86 * mu * (9.81 * 1.55 + df * 1.05);
+
+    // ---- 피트 판단 ------------------------------------------------------
+    if (!this.wantPit && car.pitStops < 1 && race.mode !== 'practice') {
+      if (car.lap >= this.pitLap || car.tyreWear > 0.80) this.wantPit = true;
+    }
+
+    // ---- 모드 전환 -------------------------------------------------------
+    var pit = track.pit;
+    if (this.mode === 'race' && this.wantPit && !car.finished) {
+      var dEntry = ((pit.entryIdx - car.trackIdx) % n + n) % n;
+      if (dEntry < 6) {
+        this.mode = 'pitIn';
+        this.pitPtr = 0;
+        car.pitState = 'in';
+        this.boxIdx = pit.boxIdx[race.teamIndex(car.team)];
+      }
+    }
+
+    if (this.mode === 'race') this.driveLine(dt, race, mu, brakeDecel);
+    else this.drivePit(dt, race, mu);
+
+    // ---- 스턱 / 오프트랙 복구 ---------------------------------------------
+    if (!car.onTrack && this.mode === 'race') this.offTime += dt; else this.offTime = 0;
+    if (car.speed < 3 && this.mode !== 'pitStop') this.stuck += dt; else this.stuck = 0;
+    if (this.stuck > 2.5 || this.offTime > 5) {
+      {
+        var i = car.trackIdx;
+        var tgt = this.mode === 'race' ? track.race[i] : pit.pts[Math.min(this.pitPtr, pit.pts.length - 1)];
+        car.heading = Math.atan2(track.T[i][1], track.T[i][0]);
+        car.x = tgt[0]; car.y = tgt[1];
+        car.vx = Math.cos(car.heading) * 12; car.vy = Math.sin(car.heading) * 12;
+        car.spinTimer = 0;
+        this.stuck = 0;
+        this.offTime = 0;
+      }
+    }
+  };
+
+  AIDriver.prototype.driveLine = function (dt, race, mu, brakeDecel) {
+    var car = this.car, track = this.track, n = track.n, sp = track.spacing;
+    var i = car.trackIdx;
+
+    // ---- 앞차 감지 / 추월 라인 --------------------------------------------
+    this.targetOffset = 0;
+    var ahead = race.carAhead(car, 42);
+    if (ahead) {
+      var gap = ahead.dist;
+      var closing = car.speed - ahead.car.speed;
+      if (gap < 34 && (closing > -1.5 || gap < 12)) {
+        // 트랙 폭 안에서 반대편으로
+        var theirLat = ahead.lat;
+        var room = track.half - 2.2;
+        var side = theirLat > 0 ? -1 : 1;
+        var aggr = car.driver.agg * this.skill;
+        this.targetOffset = side * Math.min(room, 3.2 + aggr * 3.0);
+        if (gap < 9 && closing > 3) car.brake = Math.max(car.brake, 0.15);
+      }
+    }
+    // 블루 플래그: 랩 차이 나는 차는 비켜준다
+    if (race.mode === 'race' && ahead === null) {
+      var behind = race.carBehind(car, 25);
+      if (behind && behind.car.lap > car.lap) this.targetOffset = (track.lat[i] > 0 ? -1 : 1) * (track.half - 2.5);
+    }
+    this.offset += (this.targetOffset - this.offset) * Math.min(1, dt * 2.2);
+
+    // ---- 목표 지점 ---------------------------------------------------------
+    var offTrack = !car.onTrack;
+    var look = offTrack ? (5 + car.speed * 0.22) : (6 + car.speed * 0.40);
+    var steps = Math.max(2, Math.round(look / sp));
+    var ti = (i + steps) % n;
+    var base = offTrack ? track.pts[ti] : track.race[ti];
+    var N = track.N[ti];
+    var tx = base[0] + N[0] * (offTrack ? 0 : this.offset);
+    var ty = base[1] + N[1] * (offTrack ? 0 : this.offset);
+
+    // 살짝의 노이즈(사람다운 흔들림)
+    this.noise += dt * 1.6;
+    var wob = offTrack ? 0 : Math.sin(this.noise) * (1 - this.skill) * 9;
+    tx += N[0] * wob; ty += N[1] * wob;
+
+    // ---- 조향 (pure pursuit: 필요한 곡률만큼만 꺾는다) ------------------------
+    car.steer = pursue(car, tx, ty);
+
+    // ---- 목표 속도 -----------------------------------------------------------
+    var vmax = 120;
+    var horizon = Math.round((28 + car.speed * car.speed / (2 * brakeDecel)) / sp) + 6;
+    for (var j = 1; j <= horizon; j++) {
+      var idx = (i + j) % n;
+      var vc = cornerSpeed(track.raceK[idx], mu, car.aero);
+      var dist = j * sp;
+      var allow = Math.sqrt(vc * vc + 2 * brakeDecel * dist);
+      if (allow < vmax) vmax = allow;
+    }
+    vmax *= (0.90 + this.skill * 0.07) * (track.half < 6 ? 0.955 : 1);
+    if (offTrack) vmax = Math.min(vmax, 24);   // 복귀 우선
+
+    // 앞차 추종 (추월 불가 시 속도 맞춤)
+    if (ahead && ahead.dist < 14 && Math.abs(ahead.lat - (track.lat[i] + this.offset)) < 3.4) {
+      vmax = Math.min(vmax, ahead.car.speed + (ahead.dist - 7) * 0.9);
+    }
+
+    var diff = vmax - car.speed;
+    if (diff > 0.6) { car.throttle = clamp(diff * 0.5, 0, 1); car.brake = 0; }
+    else if (diff < -0.4) { car.throttle = 0; car.brake = clamp(-diff * 0.32, 0, 1); }
+    else { car.throttle = 0.55; car.brake = 0; }
+
+    // 실수: 드물게 브레이킹 포인트를 놓친다
+    if (this.mistake > 0) {
+      this.mistake -= dt;
+      car.brake *= 0.35;
+    } else if (Math.random() < dt * (1 - this.skill) * 0.55) {
+      this.mistake = 0.35 + Math.random() * 0.4;
+    }
+
+    // ERS / DRS
+    car.ers = car.ersCharge > 0.22 && car.throttle > 0.8 &&
+              (car.drsAllowed || car.speed > 45) && car.driver.agg > 0.6;
+    car.drs = car.drsAllowed && car.throttle > 0.8;
+  };
+
+  AIDriver.prototype.drivePit = function (dt, race, mu) {
+    var car = this.car, pit = this.track.pit;
+    var pts = pit.pts, m = pts.length;
+
+    // 진행 포인터 전진
+    while (this.pitPtr < m - 1) {
+      var p = pts[this.pitPtr];
+      var q = pts[this.pitPtr + 1];
+      var dx = car.x - p[0], dy = car.y - p[1];
+      var ex = q[0] - p[0], ey = q[1] - p[1];
+      if (dx * ex + dy * ey > ex * ex + ey * ey) this.pitPtr++;
+      else break;
+    }
+
+    var look = Math.max(2, Math.round((4 + car.speed * 0.5) / this.track.spacing));
+    var ti = Math.min(m - 1, this.pitPtr + look);
+    var t = pts[ti];
+    car.steer = pursue(car, t[0], t[1]);
+
+    var limit = pit.limit;
+    var vmax = limit;
+
+    if (this.mode === 'pitIn') {
+      var box = pts[this.boxIdx];
+      var dBox = Math.hypot(box[0] - car.x, box[1] - car.y);
+      var passed = this.pitPtr >= this.boxIdx;
+      vmax = Math.min(limit, Math.sqrt(Math.max(0, 2 * 4.0 * Math.max(0, dBox - 1.0))));
+      if ((dBox < 2.4 && car.speed < 4) || (passed && car.speed < 6)) {
+        this.mode = 'pitStop';
+        car.pitState = 'stopped';
+        car.pitTimer = race.pitStopDuration(car);
+        car.x = box[0]; car.y = box[1];
+        car.vx = 0; car.vy = 0; car.speed = 0;
+      }
+    } else if (this.mode === 'pitStop') {
+      vmax = 0;
+      car.pitTimer -= dt;
+      if (car.pitTimer <= 0) {
+        car.changeTyre(this.nextCompound);
+        if (race.mode === 'practice') car.fuel = race.fuelLoad;
+        car.damage *= 0.35;
+        car.pitStops++;
+        this.mode = 'pitOut';
+        car.pitState = 'out';
+        this.wantPit = false;
+      }
+    } else if (this.mode === 'pitOut') {
+      vmax = limit;
+      if (this.pitPtr >= m - 3) {
+        this.mode = 'race';
+        car.pitState = 'none';
+        this.offset = 0;
+      }
+    }
+
+    var diff = vmax - car.speed;
+    if (vmax <= 0.05) { car.throttle = 0; car.brake = 1; }
+    else if (diff > 0.3) { car.throttle = clamp(diff * 0.6, 0, 1); car.brake = 0; }
+    else { car.throttle = 0; car.brake = clamp(-diff * 0.4, 0, 1); }
+    car.ers = false; car.drs = false;
+  };
+
+  /** 목표점을 지나는 원호의 곡률로부터 조향 입력을 역산한다 */
+  function pursue(car, tx, ty) {
+    var dx = tx - car.x, dy = ty - car.y;
+    var L = Math.max(4, Math.hypot(dx, dy));
+    var alpha = wrapAngle(Math.atan2(dy, dx) - car.heading);
+    var kappa = 2 * Math.sin(alpha) / L;
+    var steerAngle = Math.atan(kappa * 3.6);
+    var steerMax = 0.52 - 0.34 * clamp(car.speed / 78, 0, 1);
+    return clamp(steerAngle / Math.max(steerMax, 0.06), -1, 1);
+  }
+
+  function wrapAngle(a) {
+    while (a > Math.PI) a -= Math.PI * 2;
+    while (a < -Math.PI) a += Math.PI * 2;
+    return a;
+  }
+
+  global.AIDriver = AIDriver;
+  global.AIUtil = { cornerSpeed: cornerSpeed, wrapAngle: wrapAngle };
+})(typeof window !== 'undefined' ? window : globalThis);

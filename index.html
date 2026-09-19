@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>F1 THE GAME</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230a0c12'/%3E%3Ctext x='16' y='23' font-size='20' font-weight='bold' font-style='italic' text-anchor='middle' fill='%23e10600' font-family='sans-serif'%3EF1%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ============ 인트로 ============ -->
+<div id="intro" class="screen intro active">
+  <div class="intro-stage">
+    <div id="introPresent" class="intro-line present">presented by<span class="gg">GG GAMES</span></div>
+    <div id="introTitle" class="intro-line title">
+      <span class="f1">F1</span><span class="tg">THE GAME</span>
+      <div class="bar"><i></i><i></i><i></i></div>
+    </div>
+  </div>
+  <div class="intro-skip">아무 키나 눌러 건너뛰기</div>
+</div>
+
+<!-- ============ 메인 메뉴 ============ -->
+<div id="menu" class="screen">
+  <div class="menu-wrap">
+    <div class="brand"><span class="f1">F1</span> THE GAME</div>
+    <div class="brand-sub">presented by GG GAMES</div>
+    <div class="menu-list">
+      <button class="menu-item" data-mode="offline">
+        <b>오프라인 레이스</b><span>서킷 1개를 골라 AI 19대와 단판 승부</span>
+      </button>
+      <button class="menu-item" data-mode="practice">
+        <b>연습장</b><span>무제한 주행. 랩타임과 피트스탑을 마음껏 연습</span>
+      </button>
+      <button class="menu-item" data-mode="gp">
+        <b>그랜드 프릭스</b><span>F1 서킷 5개를 도는 챔피언십</span>
+      </button>
+      <button class="menu-item" data-mode="help">
+        <b>조작법</b><span>키보드 컨트롤 안내</span>
+      </button>
+    </div>
+    <div class="foot">v1.0 · 키보드 전용 · ↑↓←→ 또는 WASD</div>
+  </div>
+</div>
+
+<!-- ============ 팀 선택 ============ -->
+<div id="teamSelect" class="screen">
+  <div class="panel">
+    <h2>팀 선택</h2>
+    <div class="sub" id="teamSelectSub">2026 시즌 10개 팀</div>
+    <div id="teamGrid" class="team-grid"></div>
+    <div class="row-btns">
+      <button class="btn ghost" data-back>뒤로</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 드라이버 선택 ============ -->
+<div id="driverSelect" class="screen">
+  <div class="panel">
+    <h2>드라이버 선택</h2>
+    <div class="sub" id="driverSelectSub"></div>
+    <div id="driverGrid" class="driver-grid"></div>
+    <div class="row-btns">
+      <button class="btn ghost" data-back>뒤로</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 서킷 선택 ============ -->
+<div id="trackSelect" class="screen">
+  <div class="panel wide">
+    <h2>서킷 선택</h2>
+    <div class="sub">스타일라이즈된 F1 서킷 5종</div>
+    <div id="trackGrid" class="track-grid"></div>
+    <div class="row-btns">
+      <button class="btn ghost" data-back>뒤로</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 레이스 설정 ============ -->
+<div id="setup" class="screen">
+  <div class="panel">
+    <h2>레이스 설정</h2>
+    <div class="sub" id="setupSub"></div>
+    <div class="opt-row"><label>랩 수</label><div id="optLaps" class="opts"></div></div>
+    <div class="opt-row"><label>AI 난이도</label><div id="optDiff" class="opts"></div></div>
+    <div class="opt-row"><label>시작 타이어</label><div id="optTyre" class="opts"></div></div>
+    <div class="opt-row"><label>주행 가이드</label><div id="optLine" class="opts"></div></div>
+    <div class="note" id="setupNote"></div>
+    <div class="row-btns">
+      <button class="btn ghost" data-back>뒤로</button>
+      <button class="btn primary" id="toQuali">예선으로</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 예선 결과 ============ -->
+<div id="quali" class="screen">
+  <div class="panel wide">
+    <h2>예선 결과</h2>
+    <div class="sub" id="qualiSub"></div>
+    <div class="table-wrap"><table id="qualiTable"></table></div>
+    <div class="row-btns">
+      <button class="btn primary" id="toRace">그리드로 이동</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 레이스 ============ -->
+<div id="game" class="screen game">
+  <canvas id="canvas"></canvas>
+
+  <div class="hud">
+    <div class="hud-tl">
+      <div class="pos-box"><b id="hudPos">1</b><span id="hudPosOf">/20</span></div>
+      <div class="lap-box"><span>LAP</span><b id="hudLap">1/5</b></div>
+      <div class="flagline" id="hudFlags"></div>
+    </div>
+
+    <div class="hud-tc">
+      <div class="timebar">
+        <div class="tb"><span>현재</span><b id="hudCur">0:00.000</b></div>
+        <div class="tb"><span>직전 랩</span><b id="hudLast">--:--.---</b></div>
+        <div class="tb"><span>베스트</span><b id="hudBest">--:--.---</b></div>
+      </div>
+      <div class="gapbar"><span id="hudGapAhead">—</span><span id="hudGapBehind">—</span></div>
+    </div>
+
+    <div class="hud-left">
+      <div class="standings" id="hudStandings"></div>
+    </div>
+
+    <div class="hud-bl">
+      <div class="gauge">
+        <div class="g-row"><span>타이어</span>
+          <b id="hudTyre">M</b>
+          <div class="bar"><i id="hudTyreBar"></i></div>
+          <em id="hudTyrePct">100%</em>
+        </div>
+        <div class="g-row"><span>연료</span><div class="bar"><i id="hudFuelBar" class="fuel"></i></div><em id="hudFuel">40kg</em></div>
+        <div class="g-row"><span>ERS</span><div class="bar"><i id="hudErsBar" class="ers"></i></div><em id="hudErs">100%</em></div>
+        <div class="g-row"><span>손상</span><div class="bar"><i id="hudDmgBar" class="dmg"></i></div><em id="hudDmg">0%</em></div>
+      </div>
+      <div class="pitplan">다음 타이어 <b id="hudNextTyre">하드</b> <span class="k">[1][2][3]</span></div>
+    </div>
+
+    <div class="hud-br">
+      <div class="speedo">
+        <div class="rev"><i id="hudRev"></i></div>
+        <div class="num"><b id="hudSpeed">0</b><span>km/h</span></div>
+        <div class="gear" id="hudGear">N</div>
+      </div>
+    </div>
+
+    <div class="hud-center">
+      <div id="lights" class="lights"></div>
+      <div id="bigMsg" class="big-msg"></div>
+      <div id="eventLog" class="event-log"></div>
+    </div>
+  </div>
+
+  <!-- 일시정지 -->
+  <div id="pause" class="overlay">
+    <div class="panel small">
+      <h2>일시정지</h2>
+      <div class="row-btns col">
+        <button class="btn primary" id="pauseResume">계속하기</button>
+        <button class="btn" id="pauseRestart">다시 시작</button>
+        <button class="btn ghost" id="pauseQuit">메뉴로 나가기</button>
+      </div>
+      <div class="note">ESC 로 계속</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 결과 ============ -->
+<div id="result" class="screen">
+  <div class="panel wide">
+    <h2 id="resultTitle">레이스 결과</h2>
+    <div class="sub" id="resultSub"></div>
+    <div class="table-wrap"><table id="resultTable"></table></div>
+    <div class="row-btns" id="resultBtns"></div>
+  </div>
+</div>
+
+<!-- ============ 챔피언십 ============ -->
+<div id="champ" class="screen">
+  <div class="panel wide">
+    <h2>챔피언십 순위</h2>
+    <div class="sub" id="champSub"></div>
+    <div class="champ-cols">
+      <div><h3>드라이버</h3><div class="table-wrap"><table id="champDrivers"></table></div></div>
+      <div><h3>컨스트럭터</h3><div class="table-wrap"><table id="champTeams"></table></div></div>
+    </div>
+    <div class="row-btns" id="champBtns"></div>
+  </div>
+</div>
+
+<!-- ============ 조작법 ============ -->
+<div id="help" class="screen">
+  <div class="panel">
+    <h2>조작법</h2>
+    <div class="keys">
+      <div><kbd>↑</kbd> / <kbd>W</kbd><span>가속</span></div>
+      <div><kbd>↓</kbd> / <kbd>S</kbd><span>브레이크 · 후진 감속</span></div>
+      <div><kbd>←</kbd> <kbd>→</kbd> / <kbd>A</kbd> <kbd>D</kbd><span>조향</span></div>
+      <div><kbd>Space</kbd><span>풀 브레이킹</span></div>
+      <div><kbd>Shift</kbd><span>ERS 오버테이크 부스트</span></div>
+      <div><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd><span>다음 피트 타이어 선택 (소프트/미디엄/하드)</span></div>
+      <div><kbd>R</kbd><span>트랙으로 복귀</span></div>
+      <div><kbd>L</kbd><span>주행 라인 가이드 켜기/끄기</span></div>
+      <div><kbd>M</kbd><span>사운드 음소거</span></div>
+      <div><kbd>ESC</kbd><span>일시정지</span></div>
+    </div>
+    <div class="note">
+      피트스탑 — 피트레인으로 진입하면 리미터가 자동으로 걸린다.
+      내 팀 박스(노란 마커)에 <b>완전히 정지</b>하면 타이어를 교체한다.
+      그랜드 프릭스와 오프라인 레이스에서는 <b>최소 1회 피트인</b>이 필요하다.
+    </div>
+    <div class="row-btns"><button class="btn ghost" data-back>뒤로</button></div>
+  </div>
+</div>
+
+<script src="js/tracks.js"></script>
+<script src="js/teams.js"></script>
+<script src="js/geometry.js"></script>
+<script src="js/car.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/race.js"></script>
+<script src="js/render.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
