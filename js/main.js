@@ -22,6 +22,7 @@
     race: null,
     renderer: null,
     paused: false,
+    retireTimer: 0,
     history: [],
     gp: null
   };
@@ -148,6 +149,7 @@
     lastLight = -1;
     lastPitStops = 0;
     accum = 0;
+    App.retireTimer = 0;
     global.SFX.init();
     global.SFX.resume();
     UI.setLights(App.race.mode === 'practice' ? -1 : 0);
@@ -197,8 +199,17 @@
       }
 
       if (race.state === 'over') { showResults(); return; }
-      if (race.player && race.player.retired && race.mode !== 'practice' && race.state !== 'over') {
-        race.state = 'over';
+      if (race.player && race.player.retired && race.mode !== 'practice') {
+        // 크래시 연출을 잠깐 보여준 뒤 결과 화면으로
+        if (App.retireTimer === 0) {
+          App.retireTimer = 2.8;
+          UI.big('RETIRED', '#ff3b30');
+          global.SFX.crash(26);
+          App.renderer.cam.shake = 18;
+        } else {
+          App.retireTimer -= dt;
+          if (App.retireTimer <= 0) race.state = 'over';
+        }
       }
     }
 
@@ -456,6 +467,7 @@
     var v = Math.min(p.speed, 22);
     p.vx = Math.cos(p.heading) * v; p.vy = Math.sin(p.heading) * v;
     p.spinTimer = 0;
+    if (race.mode === 'practice') { p.damage = 0; p.retired = false; }
     UI.big('트랙 복귀', '#ffcc33');
   }
 

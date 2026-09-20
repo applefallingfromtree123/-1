@@ -307,6 +307,13 @@
     this.drawCars(race, follow);
     this.drawParticles(race);
 
+    // 충돌 섬광
+    if (race.crashFlash > 0) {
+      ctx.fillStyle = 'rgba(255,58,40,' + (race.crashFlash * 0.42).toFixed(3) + ')';
+      ctx.fillRect(0, 0, w, h);
+      race.crashFlash = Math.max(0, race.crashFlash - dt * 1.7);
+    }
+
     ctx.restore();
   };
 

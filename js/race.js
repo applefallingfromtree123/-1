@@ -10,6 +10,10 @@
 
   function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
 
+  /* 배리어에 이 이상의 법선 속도로 박으면 즉시 리타이어 (m/s).
+     스쳐 지나가는 접촉은 살아남고, 제대로 꽂히면 끝난다. */
+  var CRASH_OUT = 17;
+
   function Race(opts) {
     this.spec = opts.spec;
     this.track = Geo.getTrack(opts.spec);
@@ -126,13 +130,28 @@
       var vn = car.vx * N[0] + car.vy * N[1];
       // 벽 쪽으로 파고드는 순간에만 충격을 준다 (튕겨 나오는 중에는 무시)
       if (vn * side > 0) {
+        var impact = Math.abs(vn);
         car.vx -= N[0] * vn * 1.35; car.vy -= N[1] * vn * 1.35;
         car.vx *= 0.62; car.vy *= 0.62;
-        var sev = Math.min(0.3, Math.max(0, Math.abs(vn) - 5) * 0.010);
-        car.damage = clamp(car.damage + sev, 0, 1);
-        if (Math.abs(vn) > 13) car.spinTimer = Math.max(car.spinTimer, 0.5);
-        if (this.sfxHook && sev > 0.03) this.sfxHook(Math.abs(vn));
-        if (car.damage >= 1 && this.mode !== 'practice') this.retire(car, '리타이어');
+        if (this.sfxHook && impact > 8) this.sfxHook(impact);
+
+        if (impact >= CRASH_OUT) {
+          // 배리어에 강하게 꽂히면 그 자리에서 레이스 종료
+          car.damage = 1;
+          car.vx *= 0.15; car.vy *= 0.15;
+          car.spinTimer = Math.max(car.spinTimer, 1.4);
+          if (this.mode === 'practice') {
+            this.crashFlash = 1;
+          } else {
+            this.retire(car, '크래시 — 리타이어');
+            this.crashFlash = 1;
+          }
+        } else {
+          var sev = Math.min(0.3, Math.max(0, impact - 5) * 0.010);
+          car.damage = clamp(car.damage + sev, 0, 1);
+          if (impact > 13) car.spinTimer = Math.max(car.spinTimer, 0.5);
+          if (car.damage >= 1 && this.mode !== 'practice') this.retire(car, '차체 손상 — 리타이어');
+        }
       } else {
         car.vx -= N[0] * vn * 0.15; car.vy -= N[1] * vn * 0.15;
       }
