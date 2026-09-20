@@ -367,9 +367,20 @@
       return { label: F1.DIFFICULTY[k].label, value: k };
     }), App.difficulty, function (v) { App.difficulty = v; });
 
+    function tyreHint(k) {
+      var t = F1.TYRES[k];
+      var parts = [t.desc];
+      if (t.paceDelta) {
+        parts.push('미디엄 대비 약 ' + Math.abs(t.paceDelta).toFixed(1) + '초/랩 ' +
+                   (t.paceDelta < 0 ? '빠름' : '느림'));
+      }
+      parts.push('스틴트 약 ' + t.stint + '랩');
+      $('tyreHint').textContent = parts.join(' · ');
+    }
     UI.buildOptions('optTyre', F1.TYRE_ORDER.map(function (k) {
       return { label: F1.TYRES[k].label, value: k };
-    }), App.tyre, function (v) { App.tyre = v; });
+    }), App.tyre, function (v) { App.tyre = v; tyreHint(v); });
+    tyreHint(App.tyre);
 
     UI.buildOptions('optLine', [
       { label: '켜기', value: true }, { label: '끄기', value: false }
@@ -380,7 +391,7 @@
 
     $('setupNote').innerHTML = isPr
       ? '연습장은 순위도 제한 시간도 없다. 피트레인에 들어가 박스에 정지하면 타이어를 교체할 수 있다.'
-      : '레이스 중 <b>최소 1회 피트인</b>이 필요하다. 타이어가 닳으면 랩타임이 1초 이상 무너진다.';
+      : '레이스 중 <b>최소 1회 피트인</b>이 필요하다. 타이어 수명이 바닥나면 그립이 급격히 무너진다(그립 절벽). 스틴트 길이는 서킷과 주행 습관에 따라 달라진다.';
 
     $('toQuali').textContent = isPr ? '주행 시작' : (isGP ? '시즌 시작' : '예선으로');
     go('setup');
@@ -431,6 +442,7 @@
       var c = { Digit1: 'soft', Digit2: 'medium', Digit3: 'hard' }[e.code];
       App.race.playerNextCompound = c;
       UI.big('다음 타이어 ' + F1.TYRES[c].label, F1.TYRES[c].color);
+      App.race.pushEvent('다음 타이어 ' + F1.TYRES[c].label + ' — ' + F1.TYRES[c].desc);
     }
   }
 

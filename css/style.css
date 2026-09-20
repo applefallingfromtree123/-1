@@ -146,6 +146,7 @@ kbd{
 .opt{background:#161b27;border:1px solid #262d3e;border-radius:7px;padding:8px 15px;font-size:13px;transition:.13s}
 .opt:hover{background:#1e2533}
 .opt.sel{background:var(--red);border-color:var(--red);color:#fff;font-weight:700}
+.hint{color:#8b93a4;font-size:12px;margin-left:4px}
 
 /* ---------------- 테이블 ---------------- */
 .table-wrap{max-height:56vh;overflow:auto;border:1px solid var(--line);border-radius:10px}

@@ -34,14 +34,25 @@
     this.reaction = 0;
   }
 
+  /* 컴파운드별 대략적인 수명(랩). 실측 기준: 소프트 7 · 미디엄 10 · 하드 15 */
+  var STINT = { soft: 7, medium: 10, hard: 15 };
+
   AIDriver.prototype.planStrategy = function (totalLaps, startCompound) {
-    var c = this.car;
-    // 스틴트 절반 지점 부근에서 피트인 (드라이버 성향에 따라 ±1랩)
-    var mid = Math.max(1, Math.round(totalLaps * (0.42 + Math.random() * 0.22)));
-    this.pitLap = clamp(mid, 1, totalLaps - 1);
-    if (startCompound === 'soft') this.nextCompound = 'hard';
-    else if (startCompound === 'hard') this.nextCompound = 'medium';
-    else this.nextCompound = Math.random() < 0.6 ? 'hard' : 'soft';
+    // 시작 타이어가 버틸 수 있는 범위 안에서 피트 랩을 잡는다
+    var cap = Math.min(totalLaps - 1, STINT[startCompound] || 10);
+    var mid = Math.round(totalLaps * (0.40 + Math.random() * 0.24));
+    this.pitLap = clamp(Math.min(mid, cap), 1, Math.max(1, totalLaps - 1));
+
+    // 남은 거리를 한 번에 끝낼 수 있는 가장 빠른 컴파운드
+    var remain = totalLaps - this.pitLap;
+    var pick = remain <= STINT.soft - 1 ? 'soft'
+             : (remain <= STINT.medium - 1 ? 'medium' : 'hard');
+    if (pick === startCompound) {
+      // 2개 컴파운드를 쓰도록 (실제 F1 규정과 같은 맥락)
+      pick = startCompound === 'soft' ? 'medium'
+           : (startCompound === 'hard' ? 'medium' : (remain <= 5 ? 'soft' : 'hard'));
+    }
+    this.nextCompound = pick;
   };
 
   AIDriver.prototype.update = function (dt, race) {

@@ -90,12 +90,19 @@
   ];
 
   /* 타이어 컴파운드
-     grip: 그립 배수, wear: 마모 속도, warm: 워밍업 계수 */
+     grip: 그립 배수 · wear: 마모 속도 · warm: 작동 온도 도달 계수
+     세 단계의 페이스 간격이 고르고, 대신 수명 차이가 크도록 맞춰져 있다.
+     desc / paceDelta / stint 는 선택 화면 안내용이며, 실버스톤 실측값 기준이다. */
   var TYRES = {
-    soft:   { id: 'soft',   label: '소프트', short: 'S', color: '#ff2b2b', grip: 1.055, wear: 1.55, warm: 1.35 },
-    medium: { id: 'medium', label: '미디엄', short: 'M', color: '#f5d20a', grip: 1.015, wear: 1.00, warm: 1.00 },
-    hard:   { id: 'hard',   label: '하드',   short: 'H', color: '#e8e8e8', grip: 0.975, wear: 0.68, warm: 0.78 },
-    inter:  { id: 'inter',  label: '인터',   short: 'I', color: '#3ac13a', grip: 0.93,  wear: 1.10, warm: 1.10 }
+    soft:   { id: 'soft',   label: '소프트', short: 'S', color: '#ff2b2b',
+              grip: 1.045, wear: 1.65, warm: 1.30,
+              desc: '가장 빠름', paceDelta: -0.6, stint: 7 },
+    medium: { id: 'medium', label: '미디엄', short: 'M', color: '#f5d20a',
+              grip: 1.014, wear: 1.00, warm: 1.02,
+              desc: '균형 — 기준 컴파운드', paceDelta: 0, stint: 10 },
+    hard:   { id: 'hard',   label: '하드',   short: 'H', color: '#e8e8e8',
+              grip: 0.994, wear: 0.60, warm: 0.88,
+              desc: '오래감 · 워밍업 느림', paceDelta: 0.8, stint: 15 }
   };
   var TYRE_ORDER = ['soft', 'medium', 'hard'];
 
