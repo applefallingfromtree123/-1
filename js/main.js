@@ -266,6 +266,7 @@
     var btns = [];
     if (App.mode === 'gp') {
       btns.push({ label: '챔피언십 순위', cls: 'primary', onClick: showChampionship });
+      btns.push({ label: '메인 메뉴', cls: 'ghost', onClick: toMenu });
     } else {
       btns.push({
         label: '다시 하기', cls: 'primary', onClick: function () {
@@ -481,6 +482,13 @@
   function togglePause() {
     App.paused = !App.paused;
     $('pause').classList.toggle('active', App.paused);
+    if (App.paused) {
+      $('pauseNote').innerHTML = App.mode === 'gp'
+        ? 'ESC 로 계속. <b>메인 메뉴로 나가면 진행 중인 그랜드 프릭스가 사라진다.</b>'
+        : (App.mode === 'practice'
+            ? '연습장은 언제 나가도 기록에 영향이 없다.'
+            : 'ESC 를 다시 누르면 계속 진행된다. 나가면 이 레이스 결과는 남지 않는다.');
+    }
     if (!App.paused) { lastTs = performance.now(); global.SFX.resume(); }
     else global.SFX.engine(null, false);
   }
@@ -512,6 +520,10 @@
 
     $('toQuali').addEventListener('click', toQuali);
     $('toRace').addEventListener('click', function () { startRace(App.pendingEntries); });
+    $('qualiBack').addEventListener('click', back);
+    $('btnMenu').addEventListener('click', function () {
+      if (!App.paused) togglePause();
+    });
     $('pauseResume').addEventListener('click', togglePause);
     $('pauseRestart').addEventListener('click', function () {
       App.paused = false;
