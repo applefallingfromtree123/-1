@@ -192,6 +192,13 @@
         }
       }
 
+      // 페널티 연출
+      if (race.penaltyFlash > 0) {
+        race.penaltyFlash = 0;
+        UI.big('+5s PENALTY', '#ffcc33');
+        global.SFX.beep(330, 0.4, 0.22);
+      }
+
       // 피트스탑 완료 연출
       if (race.player && race.player.pitStops !== lastPitStops) {
         lastPitStops = race.player.pitStops;

@@ -148,6 +148,7 @@
     var cur = race.state === 'lights' ? 0 : race.time - p.lapStart;
     e.hudCur.textContent = fmt(Math.max(0, cur));
     e.hudLast.textContent = fmt(p.lastLap);
+    e.hudLast.style.color = (p.lastLap && !p.lastLapValid) ? '#ff6b6b' : '';
     e.hudBest.textContent = fmt(p.bestLap);
 
     var ord = race.order || race.cars;
@@ -161,6 +162,10 @@
 
     // 플래그
     var flags = '';
+    if (p.penalty) flags += '<div class="flag pen">+' + p.penalty + 's 페널티</div>';
+    var warn = p.warnings % 3;
+    if (warn > 0) flags += '<div class="flag warn">트랙 한계 ' + warn + '/3</div>';
+    if (!p.lapValid) flags += '<div class="flag warn">랩 무효</div>';
     if (p.drsAllowed) flags += '<div class="flag drs">DRS</div>';
     if (p.inPitLane) flags += '<div class="flag pit">PIT LIMITER</div>';
     if (race.mandatoryPit && p.pitStops === 0 && race.mode === 'race') {

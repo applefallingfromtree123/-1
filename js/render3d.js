@@ -73,7 +73,7 @@
     for (var i = 0; i < n; i++) kerb[i] = Math.abs(track.K[i]) > 0.0040 ? 1 : 0;
 
     // 배리어 거리: 스트리트 서킷은 바로 옆, 상설 서킷은 런오프 바깥
-    var barrier = track.half + Math.min(spec.runoff, spec.id === 'monaco' ? 6 : 20);
+    var barrier = track.barrier;            // 물리와 동일한 위치
 
     // 트랙사이드 오브젝트 (관중석 / 광고판 / 나무 / 타이어월)
     var objs = [];
@@ -336,7 +336,7 @@
       cursor += step;
     }
 
-    var runWPre = half + Math.min(race.spec.runoff, 12);
+    var runWPre = half + Math.min(race.spec.runoff, 13);
     var road = pal.road, runoff = pal.runoff;
     var roadDark = shade(road, 0.88);
     var kerbA = [206, 48, 40], kerbB = [232, 232, 232];
@@ -363,7 +363,7 @@
     }
 
     // 1) 런오프 (먼 것부터)
-    var runW = half + Math.min(race.spec.runoff, 12);
+    var runW = half + Math.min(race.spec.runoff, 13);
     for (i = spans.length - 1; i >= 0; i--) {
       var a = (start + spans[i][0]) % n, b = (start + spans[i][1]) % n;
       var la = edge(a, runW), ra = edge(a, -runW);
@@ -495,6 +495,24 @@
         this.poly(q, line);
       }
     }
+    // 피트 월 — 본선과 피트레인 사이 분리벽 (물리 벽과 같은 위치)
+    var half2 = track.half, psd = pit.side, pwid = pit.width;
+    var wallCol = [222, 224, 228], wallCol2 = [196, 62, 54];
+    for (i = to - 1; i >= from; i--) {
+      var off1 = pit.off[i], off2 = pit.off[i + 1];
+      var inner1 = off1 - psd * (pwid / 2), inner2 = off2 - psd * (pwid / 2);
+      if (Math.abs(inner1) <= half2 + 1.0 || Math.abs(inner2) <= half2 + 1.0) continue;
+      var w1 = inner1 - psd * 1.1, w2 = inner2 - psd * 1.1;
+      var s1 = pit.idx[i], s2 = pit.idx[i + 1];
+      var c1 = track.pts[s1], c2 = track.pts[s2];
+      var n1 = track.N[s1], n2 = track.N[s2];
+      var x1 = c1[0] + n1[0] * w1, y1 = c1[1] + n1[1] * w1;
+      var x2 = c2[0] + n2[0] * w2, y2 = c2[1] + n2[1] * w2;
+      q.length = 0;
+      q.push(x1, y1, 0, x2, y2, 0, x2, y2, 1.15, x1, y1, 1.15);
+      this.poly(q, ((i >> 2) % 4 === 0) ? wallCol2 : wallCol);
+    }
+
     // 팀 박스
     var teams = global.F1DATA.TEAMS;
     for (var t = 0; t < pit.boxIdx.length; t++) {

@@ -186,6 +186,8 @@ td.num{font-variant-numeric:tabular-nums;color:#c3cbd9}
 .flag.pit{background:#a27a00;color:#fff3cf}
 .flag.box{background:var(--red);color:#fff;animation:blink .7s infinite}
 .flag.off{background:#5a5f6b;color:#e7eaef}
+.flag.warn{background:#7a6200;color:#ffe9a8}
+.flag.pen{background:#8c1d1d;color:#ffd6d6}
 @keyframes blink{50%{opacity:.35}}
 
 .hud-tc{top:16px;left:50%;transform:translateX(-50%);text-align:center}

@@ -303,6 +303,8 @@
       pts: pts, n: n, T: T, N: N, S: S, K: K, raceK: raceK,
       left: left, right: right, race: race, lat: lat,
       length: total, spacing: SPACING, half: half,
+      barrier: half + spec.runoff,            // 물리 벽 = 그려지는 배리어
+      runoff: spec.runoff,
       pit: {
         pts: pitPts, idx: pitIdx, off: pitOff,
         boxIdx: pitBoxIdx, width: 11,

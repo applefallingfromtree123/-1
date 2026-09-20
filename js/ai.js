@@ -132,11 +132,11 @@
 
     // ---- 앞차 감지 / 추월 라인 --------------------------------------------
     this.targetOffset = 0;
-    var ahead = race.carAhead(car, 42);
+    var ahead = race.carAhead(car, Math.max(45, car.speed * 1.0));
     if (ahead) {
       var gap = ahead.dist;
       var closing = car.speed - ahead.car.speed;
-      if (gap < 34 && (closing > -1.5 || gap < 12)) {
+      if (gap < Math.max(34, car.speed * 0.6) && (closing > -1.5 || gap < 12)) {
         // 트랙 폭 안에서 반대편으로
         var theirLat = ahead.lat;
         var room = track.half - 2.2;
@@ -184,9 +184,13 @@
     vmax *= (0.90 + this.skill * 0.07) * (track.half < 6 ? 0.955 : 1);
     if (offTrack) vmax = Math.min(vmax, 24);   // 복귀 우선
 
-    // 앞차 추종 (추월 불가 시 속도 맞춤)
-    if (ahead && ahead.dist < 14 && Math.abs(ahead.lat - (track.lat[i] + this.offset)) < 3.4) {
-      vmax = Math.min(vmax, ahead.car.speed + (ahead.dist - 7) * 0.9);
+    // 앞차 추종 — 같은 라인에 있으면 속도에 맞춘 안전 간격을 유지한다.
+    // (14m 에서야 반응하면 250km/h 에서는 0.2초라 이미 늦다)
+    if (ahead && Math.abs(ahead.lat - (car.lat || 0)) < 3.2) {
+      var gapNeed = 7 + car.speed * 0.28;
+      if (ahead.dist < gapNeed * 2.3) {
+        vmax = Math.min(vmax, ahead.car.speed + (ahead.dist - gapNeed) * 1.35);
+      }
     }
 
     var diff = vmax - car.speed;
@@ -229,6 +233,21 @@
 
     var limit = pit.limit;
     var vmax = limit;
+
+    // 피트레인 대기열 — 앞차를 들이받지 않도록 간격을 둔다
+    var qAhead = null;
+    for (var ci = 0; ci < race.cars.length; ci++) {
+      var other = race.cars[ci];
+      if (other === car || other.retired) continue;
+      if (!other.inPitLane && other.pitState === 'none') continue;
+      var ddx = other.x - car.x, ddy = other.y - car.y;
+      var dsq = ddx * ddx + ddy * ddy;
+      if (dsq > 900) continue;                              // 30m 밖
+      if (ddx * Math.cos(car.heading) + ddy * Math.sin(car.heading) < 1) continue;
+      var dd = Math.sqrt(dsq);
+      if (!qAhead || dd < qAhead.d) qAhead = { car: other, d: dd };
+    }
+    if (qAhead) vmax = Math.min(vmax, Math.max(0, qAhead.car.speed + (qAhead.d - 8) * 0.8));
 
     if (this.mode === 'pitIn') {
       var box = pts[this.boxIdx];

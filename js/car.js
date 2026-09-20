@@ -18,7 +18,7 @@
     this.isPlayer = !!cfg.isPlayer;
     this.id = cfg.id;
 
-    this.x = 0; this.y = 0; this.heading = 0;
+    this.x = 0; this.y = 0; this.heading = 0; this.lat = 0;
     this.vx = 0; this.vy = 0;          // 월드 좌표 속도
     this.yawRate = 0;
     this.speed = 0;
@@ -57,7 +57,15 @@
     this.pitState = 'none';
     this.pitTimer = 0;
     this.pitStops = 0;
-    this.penalty = 0;
+    this.penalty = 0;          // 누적 시간 페널티(초)
+    this.warnings = 0;         // 트랙 한계 경고
+    this.lapValid = true;      // 현재 랩 유효 여부
+    this.lastLapValid = true;
+    this.offTrackTimer = 0;
+    this.offTrackCounted = false;
+    this.pitWallSide = 0;      // 피트 월 기준 어느 쪽에 있는가
+    this.incidentCool = 0;     // 추돌 페널티 쿨다운
+    this.incidents = 0;
     this.pitRequested = false;
     this.inPitLane = false;
     this.onTrack = true;
@@ -76,6 +84,7 @@
     this.x = x; this.y = y; this.heading = heading;
     this.vx = 0; this.vy = 0; this.speed = 0; this.yawRate = 0;
     this.spinTimer = 0;
+    this.reverse = false; this.reverseHold = 0;
   };
 
   Car.prototype.gearInfo = function () {

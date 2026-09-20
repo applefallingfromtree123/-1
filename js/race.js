@@ -14,6 +14,9 @@
      스쳐 지나가는 접촉은 살아남고, 제대로 꽂히면 끝난다. */
   var CRASH_OUT = 17;
 
+  /* 차 반폭. 이 이상 흰 선을 넘으면 네 바퀴가 모두 나간 것으로 본다 */
+  var CAR_HALF_W = 1.0;
+
   function Race(opts) {
     this.spec = opts.spec;
     this.track = Geo.getTrack(opts.spec);
@@ -37,6 +40,8 @@
     this.fastestLap = { time: 0, car: null };
     this.playerNextCompound = opts.playerNextCompound || 'hard';
     this.pitBoxHint = false;
+    this.crashFlash = 0;
+    this.penaltyFlash = 0;
     this.fuelLoad = this.mode === 'practice' ? 60 : Math.min(110, Math.max(12, this.totalLaps * 3.2 + 4));
 
     // 메인 인덱스 -> 피트레인 배열 인덱스
@@ -120,43 +125,73 @@
     else surface = 'grass';
     car.onTrack = surface !== 'grass';
 
-    // 벽/배리어
-    var limit = half + this.spec.runoff;
-    if (!inPit && a > limit) {
-      var N = track.N[idx];
-      var side = Math.sign(lat);
-      var push = (a - limit) * side;
-      car.x -= N[0] * push; car.y -= N[1] * push;
-      var vn = car.vx * N[0] + car.vy * N[1];
-      // 벽 쪽으로 파고드는 순간에만 충격을 준다 (튕겨 나오는 중에는 무시)
-      if (vn * side > 0) {
-        var impact = Math.abs(vn);
-        car.vx -= N[0] * vn * 1.35; car.vy -= N[1] * vn * 1.35;
-        car.vx *= 0.62; car.vy *= 0.62;
-        if (this.sfxHook && impact > 8) this.sfxHook(impact);
+    // 외곽 배리어 — 차는 항상 트랙 쪽에 있어야 한다
+    if (!inPit && a > track.barrier) {
+      lat = this.planeWall(car, idx, lat, Math.sign(lat) * track.barrier, -Math.sign(lat), 0);
+      car.lat = lat;
+    }
 
-        if (impact >= CRASH_OUT) {
-          // 배리어에 강하게 꽂히면 그 자리에서 레이스 종료
-          car.damage = 1;
-          car.vx *= 0.15; car.vy *= 0.15;
-          car.spinTimer = Math.max(car.spinTimer, 1.4);
-          if (this.mode === 'practice') {
-            this.crashFlash = 1;
-          } else {
-            this.retire(car, '크래시 — 리타이어');
-            this.crashFlash = 1;
-          }
-        } else {
-          var sev = Math.min(0.3, Math.max(0, impact - 5) * 0.010);
-          car.damage = clamp(car.damage + sev, 0, 1);
-          if (impact > 13) car.spinTimer = Math.max(car.spinTimer, 0.5);
-          if (car.damage >= 1 && this.mode !== 'practice') this.retire(car, '차체 손상 — 리타이어');
+    // 피트 월 — 피트레인과 본선 사이를 잔디로 가로지르지 못하게 막는다
+    if (pitOff !== null) {
+      var pw = track.pit.width, psd = track.pit.side;
+      var innerEdge = pitOff - psd * (pw / 2);      // 피트레인에서 본선에 가까운 가장자리
+      if (Math.abs(innerEdge) > half + 1.0) {
+        var wallLat = innerEdge - psd * 1.1;
+        var nSign = -psd;                            // 본선 쪽이 양수가 되도록
+        var rel = (lat - wallLat) * nSign;
+        if (Math.abs(rel) > 1.8) car.pitWallSide = rel > 0 ? 1 : -1;
+        var mySide = car.pitWallSide || (rel > 0 ? 1 : -1);
+        car.lat = this.planeWall(car, idx, lat, wallLat, nSign * mySide, 0.7);
+        // 피트레인 바깥(가라지 쪽) 벽
+        if (inPit) {
+          car.lat = this.planeWall(car, idx, car.lat,
+                                   pitOff + psd * (pw / 2 + 0.8), -psd, 0);
         }
-      } else {
-        car.vx -= N[0] * vn * 0.15; car.vy -= N[1] * vn * 0.15;
       }
+    } else {
+      car.pitWallSide = 0;
     }
     return surface;
+  };
+
+  /**
+   * lat = wallLat 위치의 평면 벽. inside 는 차가 있어야 하는 쪽(+1 이면 lat 이 큰 쪽).
+   * thick 만큼 벽에서 띄워 밀어낸다. 보정된 lat 을 돌려준다.
+   */
+  Race.prototype.planeWall = function (car, idx, lat, wallLat, inside, thick) {
+    var N = this.track.N[idx];
+    var rel = (lat - wallLat) * inside;
+    if (rel >= thick) return lat;
+    var newLat = wallLat + inside * thick;
+    var dLat = newLat - lat;
+    car.x += N[0] * dLat; car.y += N[1] * dLat;
+    var vn = car.vx * N[0] + car.vy * N[1];   // lat 증가 방향 속도 성분
+    var into = -vn * inside;                   // 벽으로 파고드는 속도
+    if (into > 0) {
+      car.vx -= N[0] * vn * 1.35; car.vy -= N[1] * vn * 1.35;
+      car.vx *= 0.62; car.vy *= 0.62;
+      this.wallImpact(car, into);
+    } else {
+      car.vx -= N[0] * vn * 0.15; car.vy -= N[1] * vn * 0.15;
+    }
+    return newLat;
+  };
+
+  /** 벽 충돌 강도에 따른 손상 / 리타이어 처리 */
+  Race.prototype.wallImpact = function (car, impact) {
+    if (this.sfxHook && impact > 8) this.sfxHook(impact);
+    if (impact >= CRASH_OUT) {
+      car.damage = 1;
+      car.vx *= 0.15; car.vy *= 0.15;
+      car.spinTimer = Math.max(car.spinTimer, 1.4);
+      this.crashFlash = 1;
+      if (this.mode !== 'practice') this.retire(car, '크래시 — 리타이어');
+    } else {
+      var sev = Math.min(0.3, Math.max(0, impact - 5) * 0.010);
+      car.damage = clamp(car.damage + sev, 0, 1);
+      if (impact > 13) car.spinTimer = Math.max(car.spinTimer, 0.5);
+      if (car.damage >= 1 && this.mode !== 'practice') this.retire(car, '차체 손상 — 리타이어');
+    }
   };
 
   Race.prototype.retire = function (car, reason) {
@@ -164,6 +199,63 @@
     car.retired = true;
     car.throttle = 0;
     this.pushEvent((car.isPlayer ? '● ' : '') + car.driver.code + ' ' + reason);
+  };
+
+  /* ---- 반칙(트랙 한계) 판정 -------------------------------------------
+     흰 선 바깥으로 네 바퀴가 모두 나가면 위반. 랩은 무효가 되고,
+     경고 3회마다 5초 페널티가 붙는다 (F1 규정과 동일한 방식). */
+  Race.prototype.trackLimits = function (car, dt) {
+    if (car.retired || car.inPitLane || car.pitState !== 'none') return;
+    var over = Math.abs(car.lat) - this.track.half;
+    if (over > CAR_HALF_W && car.speed > 12) {
+      car.offTrackTimer += dt;
+      if (!car.offTrackCounted && car.offTrackTimer > 0.18) {
+        car.offTrackCounted = true;
+        car.lapValid = false;
+        this.addWarning(car);
+      }
+    } else if (over < 0.2) {
+      car.offTrackTimer = 0;
+      car.offTrackCounted = false;
+    }
+  };
+
+  Race.prototype.addWarning = function (car) {
+    if (this.mode === 'practice') {
+      if (car.isPlayer) this.pushEvent('랩 무효 — 트랙 한계');
+      return;
+    }
+    car.warnings++;
+    if (car.warnings % 3 === 0) {
+      car.penalty += 5;
+      this.pushEvent(car.driver.code + ' 트랙 한계 3회 — 5초 페널티');
+      if (car.isPlayer) this.penaltyFlash = 1.6;
+    } else if (car.isPlayer) {
+      this.pushEvent('트랙 한계 경고 ' + (car.warnings % 3) + '/3 — 랩 무효');
+    }
+  };
+
+  /**
+   * offender 가 victim 을 뒤에서 '정면으로' 받았는지.
+   * 나란히 달리다 스치는 접촉은 제외해야 하므로 조건을 좁게 잡는다.
+   */
+  Race.prototype.rearEnded = function (offender, victim, nx, ny) {
+    var fx = Math.cos(offender.heading), fy = Math.sin(offender.heading);
+    if (nx * fx + ny * fy < 0.88) return false;          // 충돌 법선이 내 진행 방향
+    var dx = victim.x - offender.x, dy = victim.y - offender.y;
+    var ahead = dx * fx + dy * fy;
+    var side = Math.abs(-dx * fy + dy * fx);
+    return ahead > 2.2 && side < 1.5 && offender.progress < victim.progress;
+  };
+
+  /** 충돌 유발 페널티 (레이스당 1회까지) */
+  Race.prototype.addIncident = function (offender, victim) {
+    if (this.mode === 'practice' || offender.incidentCool > 0 || offender.incidents >= 1) return;
+    offender.incidentCool = 10;
+    offender.incidents++;
+    offender.penalty += 5;
+    this.pushEvent(offender.driver.code + ' 충돌 유발 — 5초 페널티');
+    if (offender.isPlayer) this.penaltyFlash = 1.6;
   };
 
   Race.prototype.pushEvent = function (text) {
@@ -215,7 +307,11 @@
       car.step(dt, {
         grip: this.grip, surface: surface, pitLimit: pitLimit, aeroDrag: this.aeroDrag
       });
-      if (running) this.lapLogic(car, dt);
+      if (running) {
+        this.lapLogic(car, dt);
+        this.trackLimits(car, dt);
+      }
+      if (car.incidentCool > 0) car.incidentCool -= dt;
     }
 
     this.collisions();
@@ -235,7 +331,11 @@
   };
 
   Race.prototype.applyInput = function (car, input, dt) {
-    if (car.pitState === 'stopped') { car.throttle = 0; car.brake = 1; car.steer = 0; return; }
+    if (car.pitState === 'stopped') {
+      car.throttle = 0; car.brake = 1; car.steer = 0;
+      car.reverse = false; car.reverseHold = 0;
+      return;
+    }
     var steerSpeed = 3.4, ret = 5.0;
     var want = (input.left ? -1 : 0) + (input.right ? 1 : 0);
     if (want !== 0) car.steer = clamp(car.steer + want * steerSpeed * dt, -1, 1);
@@ -308,22 +408,28 @@
 
     if (car.lap > 0 && lapTime > 5) {
       car.lastLap = lapTime;
+      car.lastLapValid = car.lapValid;
       car.lapTimes.push(lapTime);
-      if (!car.bestLap || lapTime < car.bestLap) car.bestLap = lapTime;
-      if (!this.fastestLap.time || lapTime < this.fastestLap.time) {
-        this.fastestLap = { time: lapTime, car: car };
-        if (this.mode !== 'practice') this.pushEvent('패스티스트 랩 ' + car.driver.code + ' ' + fmt(lapTime));
+      if (car.lapValid) {
+        if (!car.bestLap || lapTime < car.bestLap) car.bestLap = lapTime;
+        if (!this.fastestLap.time || lapTime < this.fastestLap.time) {
+          this.fastestLap = { time: lapTime, car: car };
+          if (this.mode !== 'practice') this.pushEvent('패스티스트 랩 ' + car.driver.code + ' ' + fmt(lapTime));
+        }
+      } else if (car.isPlayer) {
+        this.pushEvent('랩 무효 ' + fmt(lapTime));
       }
     }
+    car.lapValid = true;
+    car.offTrackCounted = false;
 
     if (this.mode !== 'practice' && car.lap >= this.totalLaps && !car.finished) {
       car.finished = true;
-      car.finishTime = this.time;
       if (this.mandatoryPit && car.pitStops === 0) {
-        car.penalty = 30;                       // 의무 피트스탑 미이행
-        car.finishTime += 30;
+        car.penalty += 30;                      // 의무 피트스탑 미이행
         this.pushEvent(car.driver.code + ' 피트스탑 미이행 +30초');
       }
+      car.finishTime = this.time + car.penalty; // 시간 페널티는 최종 기록에 합산
       car.totalTime = car.finishTime;
       if (this.finishedCount() === 1) this.pushEvent('체커드 플래그 — ' + car.driver.code);
       if (this.state === 'green') {
@@ -409,6 +515,12 @@
                 var imp = -rel * 0.55;
                 A.vx -= nx * imp; A.vy -= ny * imp;
                 B.vx += nx * imp; B.vy += ny * imp;
+                // 뒤에서 정면으로 들이받았을 때만 '충돌 유발' 페널티
+                var closing = -rel;
+                if (closing > 18 && !A.inPitLane && !B.inPitLane) {
+                  if (this.rearEnded(A, B, nx, ny)) this.addIncident(A, B);
+                  else if (this.rearEnded(B, A, -nx, -ny)) this.addIncident(B, A);
+                }
                 var sev = Math.min(0.07, Math.max(0, Math.abs(rel) - 4) * 0.0025);
                 A.damage = clamp(A.damage + sev, 0, 1);
                 B.damage = clamp(B.damage + sev, 0, 1);
@@ -446,21 +558,20 @@
   };
 
   Race.prototype.updateDRS = function () {
-    var track = this.track, n = track.n;
+    var track = this.track;
+    var practice = this.mode === 'practice';
     for (var i = 0; i < this.cars.length; i++) {
       var car = this.cars[i];
       car.drsAllowed = false;
-      if (car.inPitLane || car.lap < 1 || this.mode === 'practice') {
-        if (this.mode !== 'practice') continue;
-      }
+      if (car.inPitLane || car.retired || car.reverse) continue;
+      // 레이스에서는 1랩 완주 후, 앞차와 1초 이내일 때만 열린다
+      if (!practice && (car.lap < 1 || car.gapAhead >= 1.0)) continue;
       for (var z = 0; z < track.drs.length; z++) {
         var zn = track.drs[z];
         var inZone = zn.start <= zn.end
           ? (car.trackIdx >= zn.start && car.trackIdx <= zn.end)
           : (car.trackIdx >= zn.start || car.trackIdx <= zn.end);
-        if (inZone && (this.mode === 'practice' || car.gapAhead < 1.0)) {
-          if (!car.inPitLane) car.drsAllowed = true;
-        }
+        if (inZone) { car.drsAllowed = true; break; }
       }
     }
   };
