@@ -139,8 +139,13 @@
     var k = this.snap ? 1 : 1 - Math.exp(-dt * (this.camMode === 2 ? 26 : 7.5));
     var kl = this.snap ? 1 : 1 - Math.exp(-dt * 14);
 
+    // 후진 중에는 시점을 돌려 진행 방향이 보이게 한다 (추격/근접 시점만)
+    var revView = car.reverse && this.camMode < 2 &&
+                  (car.vx * Math.cos(car.heading) + car.vy * Math.sin(car.heading)) < -1.2;
+    var viewHdg = car.heading + (revView ? Math.PI : 0);
+
     // 카메라가 바라보는 기준 방향 (차 방향을 약간 늦게 따라간다)
-    P.yaw = this.snap ? car.heading : angLerp(P.yaw, car.heading, 1 - Math.exp(-dt * 9));
+    P.yaw = this.snap ? viewHdg : angLerp(P.yaw, viewHdg, 1 - Math.exp(-dt * 9));
     var cy = Math.cos(P.yaw), sy = Math.sin(P.yaw);
 
     var tx = car.x - cy * dist, ty = car.y - sy * dist, tz = height;
@@ -149,7 +154,7 @@
     P.z += (tz - P.z) * k;
     P.fov += (fov - P.fov) * Math.min(1, dt * 4);
 
-    var ch = Math.cos(car.heading), sh = Math.sin(car.heading);
+    var ch = Math.cos(viewHdg), sh = Math.sin(viewHdg);
     var lx = car.x + ch * m.look, ly = car.y + sh * m.look, lz = m.lookZ;
     P.lx += (lx - P.lx) * kl; P.ly += (ly - P.ly) * kl; P.lz += (lz - P.lz) * kl;
     this.snap = false;

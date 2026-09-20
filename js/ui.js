@@ -189,7 +189,7 @@
 
     var gi = p.gearInfo();
     e.hudSpeed.textContent = Math.round(p.speed * 3.6);
-    e.hudGear.textContent = p.speed < 0.6 ? 'N' : ('GEAR ' + gi.gear);
+    e.hudGear.textContent = p.reverse ? 'REVERSE' : (p.speed < 0.6 ? 'N' : 'GEAR ' + gi.gear);
     e.hudRev.style.width = Math.min(100, (gi.rpm / 12500) * 100) + '%';
 
     UI.updateStandings(race);

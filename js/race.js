@@ -240,10 +240,27 @@
     var want = (input.left ? -1 : 0) + (input.right ? 1 : 0);
     if (want !== 0) car.steer = clamp(car.steer + want * steerSpeed * dt, -1, 1);
     else car.steer -= clamp(car.steer, -ret * dt, ret * dt);
-    car.throttle = input.up ? 1 : 0;
-    car.brake = input.down ? 1 : (input.space ? 1 : 0);
-    car.ers = !!input.shift && car.ersCharge > 0;
-    car.drs = !!car.drsAllowed && (car.throttle > 0.5);
+    // ---- 전진 / 후진 기어 전환 ----
+    // 거의 멈춘 상태에서 브레이크를 계속 누르고 있으면 후진으로 들어간다.
+    var vl = car.longSpeed();
+    if (car.reverse) {
+      if (input.up && vl > -0.6) { car.reverse = false; car.reverseHold = 0; }
+    } else if (input.down && !input.up && vl < 0.6) {
+      car.reverseHold += dt;
+      if (car.reverseHold > 0.35) { car.reverse = true; car.reverseHold = 0; }
+    } else {
+      car.reverseHold = 0;
+    }
+
+    if (car.reverse) {
+      car.throttle = input.down ? 1 : 0;
+      car.brake = (input.up || input.space) ? 1 : 0;
+    } else {
+      car.throttle = input.up ? 1 : 0;
+      car.brake = (input.down || input.space) ? 1 : 0;
+    }
+    car.ers = !!input.shift && car.ersCharge > 0 && !car.reverse;
+    car.drs = !!car.drsAllowed && !car.reverse && (car.throttle > 0.5);
   };
 
   /* ---- 랩/섹터 계측 ---------------------------------------------------- */

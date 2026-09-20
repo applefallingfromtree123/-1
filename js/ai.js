@@ -28,6 +28,8 @@
     this.nextCompound = 'medium';
     this.stuck = 0;
     this.offTime = 0;
+    this.recover = 0;
+    this.recoverTries = 0;
     this.noise = Math.random() * 6.28;
     this.mistake = 0;
     this.boxIdx = 0;
@@ -86,18 +88,42 @@
     // ---- 스턱 / 오프트랙 복구 ---------------------------------------------
     if (!car.onTrack && this.mode === 'race') this.offTime += dt; else this.offTime = 0;
     if (car.speed < 3 && this.mode !== 'pitStop') this.stuck += dt; else this.stuck = 0;
-    if (this.stuck > 2.5 || this.offTime > 5) {
-      {
-        var i = car.trackIdx;
-        var tgt = this.mode === 'race' ? track.race[i] : pit.pts[Math.min(this.pitPtr, pit.pts.length - 1)];
-        car.heading = Math.atan2(track.T[i][1], track.T[i][0]);
-        car.x = tgt[0]; car.y = tgt[1];
-        car.vx = Math.cos(car.heading) * 12; car.vy = Math.sin(car.heading) * 12;
-        car.spinTimer = 0;
-        this.stuck = 0;
-        this.offTime = 0;
-      }
+
+    // (1) 후진 탈출 중
+    if (this.recover > 0) {
+      this.recover -= dt;
+      car.reverse = true;
+      car.throttle = 1; car.brake = 0; car.steer = 0;
+      car.ers = false; car.drs = false;
+      if (this.recover <= 0) { car.reverse = false; this.stuck = 0; }
+      return;
     }
+    car.reverse = false;
+
+    // (2) 코스 밖에서 멈춰 있으면 후진으로 빼본다 (최대 2회)
+    if (this.stuck > 1.3 && this.recoverTries < 2 &&
+        this.mode === 'race' && Math.abs(car.lat || 0) > track.half) {
+      this.recover = 2.2;
+      this.recoverTries++;
+      this.stuck = 0;
+      return;
+    }
+
+    // (3) 그래도 안 되면 마샬이 트랙 위로 되돌려 준다
+    if (this.stuck > 3.0 || this.offTime > 6) {
+      var i = car.trackIdx;
+      var tgt = this.mode === 'race' ? track.race[i]
+              : pit.pts[Math.min(this.pitPtr, pit.pts.length - 1)];
+      car.heading = Math.atan2(track.T[i][1], track.T[i][0]);
+      car.x = tgt[0]; car.y = tgt[1];
+      car.vx = Math.cos(car.heading) * 12; car.vy = Math.sin(car.heading) * 12;
+      car.spinTimer = 0;
+      car.reverse = false;
+      this.stuck = 0;
+      this.offTime = 0;
+      this.recoverTries = 0;
+    }
+    if (car.onTrack && car.speed > 20) this.recoverTries = 0;
   };
 
   AIDriver.prototype.driveLine = function (dt, race, mu, brakeDecel) {

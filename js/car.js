@@ -7,6 +7,7 @@
 
   var G = 9.81;
   var GEAR_TOP = [62, 98, 133, 168, 203, 242, 285, 345]; // km/h, 기어별 상한
+  var REVERSE_MAX = 8.4;        // 후진 최대 속도 (약 30 km/h)
   var TYRES = global.F1DATA.TYRES;
 
   function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
@@ -24,6 +25,8 @@
 
     this.throttle = 0; this.brake = 0; this.steer = 0;
     this.ers = false; this.ersCharge = 1;
+    this.reverse = false;        // 후진 기어
+    this.reverseHold = 0;        // 후진 진입 래치
     this.drs = false; this.drsAllowed = false;
 
     this.tyre = TYRES[cfg.tyre || 'medium'];
@@ -76,6 +79,10 @@
   };
 
   Car.prototype.gearInfo = function () {
+    if (this.reverse && this.longSpeed() < -0.2) {
+      var rf = clamp(-this.longSpeed() / REVERSE_MAX, 0, 1);
+      return { gear: 'R', rpm: 4200 + 6200 * rf, frac: rf };
+    }
     var kmh = this.speed * 3.6, g = 0;
     while (g < GEAR_TOP.length - 1 && kmh > GEAR_TOP[g]) g++;
     var lo = g === 0 ? 0 : GEAR_TOP[g - 1];
@@ -85,6 +92,11 @@
   };
 
   /** 현재 타이어 상태가 만드는 그립 배수 */
+  /** 차체 전방 기준 부호 있는 속도 (후진이면 음수) */
+  Car.prototype.longSpeed = function () {
+    return this.vx * Math.cos(this.heading) + this.vy * Math.sin(this.heading);
+  };
+
   Car.prototype.tyreGrip = function () {
     var life = clamp(1 - this.tyreWear, 0, 1);
     var sm = life * life * (3 - 2 * life);
@@ -140,7 +152,10 @@
     if (this.ers && this.ersCharge > 0) powerKW *= 1.085;
     if (this.fuel <= 0) powerKW *= 0.35;
     var massTotal = this.mass + this.fuel;
-    var accEngine = this.throttle * Math.min(maxAccGrip, (powerKW * 1000) / (massTotal * Math.max(v, 7)));
+    // 후진은 출력이 크게 제한된다 (실제 F1 후진 기어도 마찬가지)
+    var dir = this.reverse ? -1 : 1;
+    var engCap = this.reverse ? maxAccGrip * 0.55 : maxAccGrip;
+    var accEngine = this.throttle * Math.min(engCap, (powerKW * 1000) / (massTotal * Math.max(v, 7)));
 
     var brakeCap = mu * (G * 1.55 + downforce * 1.05);
     var accBrake = this.brake * brakeCap;
@@ -149,16 +164,28 @@
     var cd = 0.00095 * env.aeroDrag;
     if (this.drs) cd *= 0.78;
     var drag = cd * v * v * (this.mass / massTotal);
-    var roll = (surface === 'grass' ? 4.0 : 0.38) + (surface === 'kerb' ? 0.9 : 0);
+    // 잔디 저항은 속도에 비례해 커진다 (멈춘 차가 스스로 빠져나올 수 있게)
+    var roll = (surface === 'grass' ? 1.1 + Math.min(2.9, v * 0.13) : 0.38) +
+               (surface === 'kerb' ? 0.9 : 0);
     var scrub = this.slip * 5.2;        // 언더스티어 스크럽
 
-    var along = accEngine - accBrake - drag - roll - scrub;
-    if (vLong < 0.4 && along < 0) along = Math.max(along, -vLong / dt);
-    vLong += along * dt;
-    if (vLong < 0) vLong = 0;
+    // 저항은 항상 진행 방향의 반대로 작용한다 (후진 중에도 동일)
+    var resist = accBrake + drag + roll + scrub;
+    var drive = dir * accEngine;
+    var v0 = vLong;
+    var along;
+    if (v0 > 0.06) along = drive - resist;
+    else if (v0 < -0.06) along = drive + resist;
+    else along = Math.abs(drive) > 0.5 ? drive : 0;   // 정지 상태
+
+    vLong = v0 + along * dt;
+    // 저항만으로 진행 방향이 뒤집히지 않게
+    if (v0 > 0 && vLong < 0 && drive <= 0) vLong = 0;
+    if (v0 < 0 && vLong > 0 && drive >= 0) vLong = 0;
+    if (vLong < -REVERSE_MAX) vLong = -REVERSE_MAX;
 
     // 피트 리미터
-    if (env.pitLimit && vLong > env.pitLimit) vLong = env.pitLimit;
+    if (env.pitLimit && Math.abs(vLong) > env.pitLimit) vLong = Math.sign(vLong) * env.pitLimit;
 
     // --- 횡방향 미끄러짐 ---------------------------------------------------
     var latGrip = (this.spinTimer > 0 ? 1.4 : 7.4) * (surface === 'grass' ? 0.45 : 1);
@@ -193,7 +220,7 @@
     else this.ersCharge = clamp(this.ersCharge + dt * (this.brake > 0.2 ? 1 / 26 : 1 / 90), 0, 1);
 
     // 잔디에서 고속 = 스핀 위험
-    if (surface === 'grass' && v > 30 && Math.abs(vLat) > 5 && this.spinTimer <= 0) {
+    if (surface === 'grass' && v > 30 && vLong > 0 && Math.abs(vLat) > 5 && this.spinTimer <= 0) {
       this.spinTimer = 0.9 + Math.random() * 0.5;
     }
   };
