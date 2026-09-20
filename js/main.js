@@ -134,13 +134,12 @@
     go('game');
     App.paused = false;
     $('pause').classList.remove('active');
-    if (!App.renderer) App.renderer = new global.Renderer($('canvas'));
+    if (!App.renderer) App.renderer = new global.Renderer3D($('canvas'));
     App.renderer.showLine = App.guide;
     App.renderer.particles.length = 0;
     resize();
     App.renderer.prepare(App.race);
-    App.renderer.cam.x = App.race.player.x;
-    App.renderer.cam.y = App.race.player.y;
+    App.renderer.reset();
     App.renderer.cam.shake = 0;
     App.race.sfxHook = function (power) {
       global.SFX.crash(power);
@@ -426,6 +425,7 @@
       App.renderer.showLine = App.guide;
       UI.big(App.guide ? '가이드 ON' : '가이드 OFF', '#37c6ff');
     }
+    if (e.code === 'KeyC') UI.big('카메라 — ' + App.renderer.cycleCamera(), '#7dd3ff');
     if (e.code === 'KeyR') resetToTrack();
     if (e.code === 'Digit1' || e.code === 'Digit2' || e.code === 'Digit3') {
       var c = { Digit1: 'soft', Digit2: 'medium', Digit3: 'hard' }[e.code];

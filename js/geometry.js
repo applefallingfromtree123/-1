@@ -199,19 +199,37 @@
     }
 
     // ---- 레이싱 라인 ----------------------------------------------------
+    // 1) 아펙스를 향한 초기 프로파일 -> 2) 코스 폭 안에서 곡률 최소화 완화
+    var usable = Math.max(1.5, half - 2.3);
     var lat = new Array(n);
-    var usable = half - 1.6;
     for (i = 0; i < n; i++) {
       var kk = K[i];
       var strength = Math.min(1, Math.abs(kk) * 260);
       lat[i] = -Math.sign(kk) * usable * strength;
     }
-    lat = smoothArray(lat, 26, true);
-    var race = new Array(n);
-    for (i = 0; i < n; i++) {
-      var l = Math.max(-usable, Math.min(usable, lat[i]));
-      race[i] = [pts[i][0] + N[i][0] * l, pts[i][1] + N[i][1] * l];
+    lat = smoothArray(lat, 12, true);
+
+    var rx = new Array(n), ry = new Array(n);
+    function sync(i) {
+      rx[i] = pts[i][0] + N[i][0] * lat[i];
+      ry[i] = pts[i][1] + N[i][1] * lat[i];
     }
+    for (i = 0; i < n; i++) sync(i);
+
+    for (var it = 0; it < 260; it++) {
+      for (i = 0; i < n; i++) {
+        var im = (i - 1 + n) % n, ip = (i + 1) % n;
+        var mx = (rx[im] + rx[ip]) * 0.5, my = (ry[im] + ry[ip]) * 0.5;
+        var want = (mx - pts[i][0]) * N[i][0] + (my - pts[i][1]) * N[i][1];
+        var v = lat[i] + (want - lat[i]) * 0.45;
+        lat[i] = v < -usable ? -usable : (v > usable ? usable : v);
+        sync(i);
+      }
+    }
+
+    var race = new Array(n);
+    for (i = 0; i < n; i++) race[i] = [rx[i], ry[i]];
+
     // 레이싱 라인 기준 곡률 (AI 목표 속도 계산용)
     // 헤딩 변화율로 구한 뒤, 근방 최대값을 취해 코너 진입에서 과속하지 않게 한다.
     var rk = new Array(n);
@@ -227,9 +245,9 @@
     rk = smoothArray(rk, 2, true);
     var raceK = new Array(n);
     for (i = 0; i < n; i++) {
-      var mx = 0;
-      for (var w = -3; w <= 3; w++) { var vv = rk[(i + w + n) % n]; if (vv > mx) mx = vv; }
-      raceK[i] = mx;
+      var mx2 = 0;
+      for (var w = -3; w <= 3; w++) { var vv = rk[(i + w + n) % n]; if (vv > mx2) mx2 = vv; }
+      raceK[i] = mx2;
     }
 
     // ---- DRS 존: 가장 긴 저곡률 직선 2곳 --------------------------------
@@ -287,7 +305,7 @@
       length: total, spacing: SPACING, half: half,
       pit: {
         pts: pitPts, idx: pitIdx, off: pitOff,
-        boxIdx: pitBoxIdx, width: 9,
+        boxIdx: pitBoxIdx, width: 11,
         entryIdx: entryIdx, exitIdx: exitIdx,
         limit: pit.limit / 3.6, side: pit.side, offset: pit.offset
       },
