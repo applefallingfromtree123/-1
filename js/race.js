@@ -14,8 +14,11 @@
      스쳐 지나가는 접촉은 살아남고, 제대로 꽂히면 끝난다. */
   var CRASH_OUT = 17;
 
-  /* 차 반폭. 이 이상 흰 선을 넘으면 네 바퀴가 모두 나간 것으로 본다 */
-  var CAR_HALF_W = 1.0;
+  /* 흰 선에서 이만큼 더 나가야 위반으로 본다.
+     차 반폭(1.0m)에 여유를 둬서 살짝 걸치는 정도는 넘어간다. */
+  var LIMIT_MARGIN = 1.7;
+  var LIMIT_DWELL = 0.30;          // 이 시간 이상 나가 있어야 집계
+  var WARN_PER_PENALTY = 4;        // 경고 이 횟수마다 시간 페널티
 
   function Race(opts) {
     this.spec = opts.spec;
@@ -207,9 +210,9 @@
   Race.prototype.trackLimits = function (car, dt) {
     if (car.retired || car.inPitLane || car.pitState !== 'none') return;
     var over = Math.abs(car.lat) - this.track.half;
-    if (over > CAR_HALF_W && car.speed > 12) {
+    if (over > LIMIT_MARGIN && car.speed > 12) {
       car.offTrackTimer += dt;
-      if (!car.offTrackCounted && car.offTrackTimer > 0.18) {
+      if (!car.offTrackCounted && car.offTrackTimer > LIMIT_DWELL) {
         car.offTrackCounted = true;
         car.lapValid = false;
         this.addWarning(car);
@@ -226,12 +229,13 @@
       return;
     }
     car.warnings++;
-    if (car.warnings % 3 === 0) {
+    if (car.warnings % WARN_PER_PENALTY === 0) {
       car.penalty += 5;
-      this.pushEvent(car.driver.code + ' 트랙 한계 3회 — 5초 페널티');
+      this.pushEvent(car.driver.code + ' 트랙 한계 ' + WARN_PER_PENALTY + '회 — 5초 페널티');
       if (car.isPlayer) this.penaltyFlash = 1.6;
     } else if (car.isPlayer) {
-      this.pushEvent('트랙 한계 경고 ' + (car.warnings % 3) + '/3 — 랩 무효');
+      this.pushEvent('트랙 한계 경고 ' + (car.warnings % WARN_PER_PENALTY) + '/' +
+                     WARN_PER_PENALTY + ' — 랩 무효');
     }
   };
 
@@ -517,7 +521,7 @@
                 B.vx += nx * imp; B.vy += ny * imp;
                 // 뒤에서 정면으로 들이받았을 때만 '충돌 유발' 페널티
                 var closing = -rel;
-                if (closing > 18 && !A.inPitLane && !B.inPitLane) {
+                if (closing > 23 && !A.inPitLane && !B.inPitLane) {
                   if (this.rearEnded(A, B, nx, ny)) this.addIncident(A, B);
                   else if (this.rearEnded(B, A, -nx, -ny)) this.addIncident(B, A);
                 }
