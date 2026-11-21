@@ -208,7 +208,7 @@
 
     // ERS / DRS
     car.ers = car.ersCharge > 0.22 && car.throttle > 0.8 &&
-              (car.drsAllowed || car.speed > 45) && car.driver.agg > 0.6;
+              (car.drsAllowed || car.speed > 45) && (car.driver.agg > 0.6 || car.overtake > 0);
     car.drs = car.drsAllowed && car.throttle > 0.8;
   };
 

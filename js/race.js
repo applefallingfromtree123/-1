@@ -561,21 +561,36 @@
     if (list.length) list[0].gapAhead = 99;   // 선두는 DRS 대상 아님
   };
 
+  /**
+   * 2026 규정
+   *  - 액티브 에어로: 지정된 직선 구간에서는 모든 차가 날개를 눕혀(직선 모드) 항력을 줄인다.
+   *  - 오버테이크 모드: 감지 지점에서 앞차와 1초 이내면 추가 전기 에너지(5초)를 받는다.
+   *    부스트(Shift) 출력이 커지고 배터리 소모는 절반이 된다.
+   */
   Race.prototype.updateDRS = function () {
-    var track = this.track;
+    var track = this.track, n = track.n;
     var practice = this.mode === 'practice';
     for (var i = 0; i < this.cars.length; i++) {
       var car = this.cars[i];
+      var prev = car._aeroIdx === undefined ? car.trackIdx : car._aeroIdx;
+      car._aeroIdx = car.trackIdx;
       car.drsAllowed = false;
-      if (car.inPitLane || car.retired || car.reverse) continue;
-      // 레이스에서는 1랩 완주 후, 앞차와 1초 이내일 때만 열린다
-      if (!practice && (car.lap < 1 || car.gapAhead >= 1.0)) continue;
+      if (car.inPitLane || car.retired || car.reverse || this.state === 'lights') continue;
       for (var z = 0; z < track.drs.length; z++) {
         var zn = track.drs[z];
         var inZone = zn.start <= zn.end
           ? (car.trackIdx >= zn.start && car.trackIdx <= zn.end)
           : (car.trackIdx >= zn.start || car.trackIdx <= zn.end);
-        if (inZone) { car.drsAllowed = true; break; }
+        if (inZone) car.drsAllowed = true;
+        // 감지 지점 통과
+        var step = ((car.trackIdx - prev) % n + n) % n;
+        var toDet = ((zn.detect - prev) % n + n) % n;
+        if (step > 0 && step < 40 && toDet > 0 && toDet <= step) {
+          if (!practice && car.lap >= 1 && car.gapAhead < 1.0) {
+            car.overtake = 5.0;
+            if (car.isPlayer) this.overtakeFlash = 1;
+          }
+        }
       }
     }
   };

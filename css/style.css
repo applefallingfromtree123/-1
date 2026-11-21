@@ -170,6 +170,8 @@ td.num{font-variant-numeric:tabular-nums;color:#c3cbd9}
 /* ---------------- 게임 ---------------- */
 .game{background:#05070c}
 #canvas{position:absolute;inset:0;display:block}
+#overlay{position:absolute;inset:0;display:block;pointer-events:none}
+.flag.ot{background:#6d28d9;color:#efe4ff;animation:blink .9s infinite}
 .hud{position:absolute;inset:0;pointer-events:none;font-variant-numeric:tabular-nums}
 .hud>div{position:absolute}
 

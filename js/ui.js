@@ -166,7 +166,8 @@
     var warn = p.warnings % 4;
     if (warn > 0) flags += '<div class="flag warn">트랙 한계 ' + warn + '/4</div>';
     if (!p.lapValid) flags += '<div class="flag warn">랩 무효</div>';
-    if (p.drsAllowed) flags += '<div class="flag drs">DRS</div>';
+    if (p.drsAllowed) flags += '<div class="flag drs">X-MODE</div>';
+    if (p.overtake > 0) flags += '<div class="flag ot">OVERTAKE ' + p.overtake.toFixed(1) + 's</div>';
     if (p.inPitLane) flags += '<div class="flag pit">PIT LIMITER</div>';
     if (race.mandatoryPit && p.pitStops === 0 && race.mode === 'race') {
       var urgent = p.lap >= race.totalLaps - 2;

@@ -27,7 +27,8 @@
     this.ers = false; this.ersCharge = 1;
     this.reverse = false;        // 후진 기어
     this.reverseHold = 0;        // 후진 진입 래치
-    this.drs = false; this.drsAllowed = false;
+    this.drs = false; this.drsAllowed = false;   // drsAllowed = 액티브 에어로 직선 모드 구간
+    this.overtake = 0;           // 오버테이크 모드 남은 시간(초) — 2026 규정
 
     this.tyre = TYRES[cfg.tyre || 'medium'];
     this.tyreWear = 0;
@@ -158,7 +159,7 @@
 
     // --- 엔진 / 브레이크 --------------------------------------------------
     var powerKW = 580 * this.pace;
-    if (this.ers && this.ersCharge > 0) powerKW *= 1.085;
+    if (this.ers && this.ersCharge > 0) powerKW *= this.overtake > 0 ? 1.15 : 1.085;
     if (this.fuel <= 0) powerKW *= 0.35;
     var massTotal = this.mass + this.fuel;
     // 후진은 출력이 크게 제한된다 (실제 F1 후진 기어도 마찬가지)
@@ -225,7 +226,13 @@
 
     this.fuel = Math.max(0, this.fuel - dt * (0.004 + this.throttle * 0.028));
 
-    if (this.ers && this.ersCharge > 0) this.ersCharge = clamp(this.ersCharge - dt / 22, 0, 1);
+    if (this.ers && this.ersCharge > 0) {
+      // 오버테이크 모드 중에는 추가 에너지를 쓰므로 배터리가 절반만 닳는다
+      this.ersCharge = clamp(this.ersCharge - dt / (this.overtake > 0 ? 44 : 22), 0, 1);
+      if (this.overtake > 0) this.overtake = Math.max(0, this.overtake - dt);
+    } else if (this.overtake > 0) {
+      this.overtake = Math.max(0, this.overtake - dt / 3);   // 안 쓰면 서서히 소멸
+    }
     else this.ersCharge = clamp(this.ersCharge + dt * (this.brake > 0.2 ? 1 / 26 : 1 / 90), 0, 1);
 
     // 잔디에서 고속 = 스핀 위험

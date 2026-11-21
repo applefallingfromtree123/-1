@@ -199,6 +199,13 @@
         global.SFX.beep(330, 0.4, 0.22);
       }
 
+      // 오버테이크 모드 획득
+      if (race.overtakeFlash) {
+        race.overtakeFlash = 0;
+        UI.big('OVERTAKE MODE', '#b98cff');
+        global.SFX.beep(880, 0.25, 0.18);
+      }
+
       // 피트스탑 완료 연출
       if (race.player && race.player.pitStops !== lastPitStops) {
         lastPitStops = race.player.pitStops;
